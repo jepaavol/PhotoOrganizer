@@ -1,9 +1,9 @@
-import subprocess
-import sysconfig
-import shutil
 import json
-import os
-import re
+import os, re, sys, csv
+import shutil
+import filecmp
+import logging
+import subprocess
 from datetime import datetime
 
 exiftool = os.path.join('C:\skriptit', 'exiftool.exe')
@@ -15,34 +15,59 @@ class PhotoOrganizer(object):
         self.options = options
         self.metadatajson = None
         self.paths = {}
+        self.log = logging.getLogger('PhotoOrganizer')
+        self.log.setLevel(logging.DEBUG)
+        fileHandler = logging.FileHandler("PhotoOrganizer.log", mode='w')
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        fileHandler.setFormatter(formatter)
+        self.log.addHandler(fileHandler)
+        self.log.info("Initializing PhotoOrganizer")
         
         
     def get_metadata_json(self):
+        """
+        Function to run Exiftool and storing received metadata to member variable.
+        """
+        
+        print('Running Exiftool to get metadata of images in Json format')
+        self.log.info('Running Exiftool to get metadata of images in Json format')
+        
         args = ['-j', '-a', '-G']
         
         if self.options.recursive:
             args += ['-r']
         
-        args.append(self.options.src_dir)
+        args.append(self.options.source_dir)
         filename = 'metadata.json'
         
         command = exiftool + ' ' + ' '.join(args) + ' >' + filename
         subprocess.call(command, shell=True)
         
-        self.metadatajson = json.load(open(filename, 'r')) 
+        try:
+            self.metadatajson = json.load(open(filename, 'r')) 
+        except ValueError:
+            print('No files to process')
+            return False
+        finally:
+            os.remove(filename)
+        
+        return True
      
     def get_paths(self):
+        """
+        Function to analyze metadata and resolving paths to member variable.
+        """
         
         metadatafields = ['File:FileModifyDate', 'File:FileAccessDate', 'File:FileCreateDate',\
                           'EXIF:ModifyDate', 'EXIF:DateTimeOriginal', 'EXIF:CreateDate']
-        for image in self.metadatajson:
-            sourcefilename = os.path.join(self.options.src_dir, image['SourceFile'])
-            print("Handling file\n" + sourcefilename)
+        for index, image in enumerate(self.metadatajson):
+            sourcefilename = os.path.join(self.options.source_dir, image['SourceFile'])
+            print("\rHandling file {}/{}".format(index + 1, len(self.metadatajson)), end='')
             
             dates = []
             for metadata in image:
                 if metadata in metadatafields:
-                    dt = self.get_datetime(image[metadata])
+                    dt = self.__get_datetime(image[metadata])
                     if dt:
                         dates.append((dt, metadata))
                 
@@ -50,14 +75,63 @@ class PhotoOrganizer(object):
             self.paths[sourcefilename] = {}
             if len(dates):
                 dir_structure = dates[0][0].strftime(self.options.sort)
-                self.paths['targetpath'] = os.path.join(self.options.dest_dir, 
+                self.paths['targetpath'] = os.path.join(self.options.target_dir, 
                                                         dir_structure, 
                                                         os.path.basename(sourcefilename))
             else:
                 self.paths['targetpath'] = 'no-info'
+    
+    def store_results(self):
+        """
+        Function to perform copy of move actions based on the get_path analysis.
+        """
+        
+        for path in self.paths:
+            sourcepath = path
+            targetpath = self.paths[path]['targetpath']
+            
+            while True: 
+                if os.path.isfile(targetpath) and filecmp(sourcepath, targetpath):
+                    break
+                elif os.path.isfile(targetpath):
+                    targetpath = __get_next_filename(targetpath)
+                else:
+                    self.__copy_or_move(sourcepath, targetpath)
+                    break
+  
+    
+    def __copy_or_move(self, source, target):
+        """
+        """
+        
+        if self.options.dry_run:
+            pass
+        else:
+            if self.options.copy:
+                shutil.copy2(source, target)
+            else:
+                shutil.move(source, target)  
+    
+    
+    def __get_next_filename(self, filename):
+        """
+        """
+        
+        base, ext = os.path.splitext(filename)
+        if len(base.split('_') == 1):
+            number = 1
+        else:
+            number = int(base.split('_')[1]) + 1
+        
+        return base + '_' + number + ext                
                 
             
-    def get_datetime(self, datestr):
+    def __get_datetime(self, datestr):
+        """
+        Internal function to get string representation of the date and returning it as 
+        datetime object. 
+        """
+        
         mo = re.search('(\d+):(\d+):(\d+) (\d+):(\d+):(\d+)(.*)', datestr)
         if mo:
             year = mo.group(1)
@@ -90,24 +164,24 @@ def main():
 
     # setup command line parsing
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter,
-                                     description='Organizes files (primarily photos and videos) into folders by date\nusing EXIF and other metadata')
-    parser.add_argument('src_dir', type=str, help='source directory')
-    parser.add_argument('dest_dir', type=str, help='destination directory')
-    parser.add_argument('-r', '--recursive', action='store_true', help='search src_dir recursively')
+                                     description='Organizes files into folders by date using EXIF data')
+    parser.add_argument('source_dir', type=str, help='source directory')
+    parser.add_argument('target_dir', type=str, help='target directory')
+    parser.add_argument('-r', '--recursive', action='store_true', help='Search source directory recursively')
     parser.add_argument('-c', '--copy', action='store_true', help='copy files instead of move')
+    parser.add_argument('--dry-run', action='store_true', help='Performs only analysis, not doing actual moving or copying')
     parser.add_argument('--sort', type=str, default='%Y\%m',
                         help="choose destination folder structure using datetime format \n\
-    https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior. \n\
-    Use forward slashes / to indicate subdirectory(ies) (independent of your OS convention). \n\
-    The default is '%%Y/%%m-%%b', which separates by year then month \n\
-    with both the month number and name (e.g., 2012/02-Feb).")
+    The default is '%%Y\%%m', which separates by year then month \n\
+    with both the month number and name (e.g., 2012/02).")
+    parser.add_argument('--csv', help='Creates CSV report and stores it to this filename')
 
     # parse command line arguments
     options = parser.parse_args()
 
     ph = PhotoOrganizer(options)
-    ph.get_metadata_json()
-    ph.get_paths()
+    if ph.get_metadata_json():
+        ph.get_paths()
     
     
 if __name__ == '__main__':
