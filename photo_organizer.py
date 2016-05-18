@@ -47,6 +47,7 @@ class PhotoOrganizer(object):
             self.metadatajson = json.load(open(filename, 'r')) 
         except ValueError:
             print('No files to process')
+            self.log.info('No files to process')
             return False
         finally:
             os.remove(filename)
@@ -63,11 +64,13 @@ class PhotoOrganizer(object):
         for index, image in enumerate(self.metadatajson):
             sourcefilename = os.path.join(self.options.source_dir, image['SourceFile'])
             print("\rHandling file {}/{}".format(index + 1, len(self.metadatajson)), end='')
+            self.log.info('Handling file {}'.format(sourcefilename))
             
             dates = []
             for metadata in image:
                 if metadata in metadatafields:
                     dt = self.__get_datetime(image[metadata])
+                    self.log.info('Metadata: {} Datetime: {}'.format(metadata, dt))
                     if dt:
                         dates.append((dt, metadata))
                 
@@ -75,27 +78,36 @@ class PhotoOrganizer(object):
             self.paths[sourcefilename] = {}
             if len(dates):
                 dir_structure = dates[0][0].strftime(self.options.sort)
-                self.paths['targetpath'] = os.path.join(self.options.target_dir, 
+                self.paths[sourcefilename]['targetpath'] = os.path.join(self.options.target_dir, 
                                                         dir_structure, 
                                                         os.path.basename(sourcefilename))
             else:
-                self.paths['targetpath'] = 'no-info'
+                self.paths[sourcefilename]['targetpath'] = 'no-info'
+                
+            self.log.info('Target path: {}'.format(self.paths[sourcefilename]['targetpath']))
     
     def store_results(self):
         """
         Function to perform copy of move actions based on the get_path analysis.
         """
         
+        self.log.info('Storing results...')
+        
         for path in self.paths:
             sourcepath = path
             targetpath = self.paths[path]['targetpath']
             
+            self.log.info('Handling {}'.format(path))
+            
             while True: 
-                if os.path.isfile(targetpath) and filecmp(sourcepath, targetpath):
+                if os.path.isfile(targetpath) and filecmp.cmp(sourcepath, targetpath):
+                    self.log.info('Identical file found {}'.format(targetpath))
                     break
                 elif os.path.isfile(targetpath):
+                    self.log.info('File with same name {}'.format(targetpath))
                     targetpath = __get_next_filename(targetpath)
                 else:
+                    self.log.info('Copy or Move to {}'.format(targetpath))
                     self.__copy_or_move(sourcepath, targetpath)
                     break
   
@@ -105,8 +117,12 @@ class PhotoOrganizer(object):
         """
         
         if self.options.dry_run:
-            pass
+            self.log.info('Dry-run copy or move')
         else:
+            
+            if not os.path.isdir(os.path.dirname(target)):
+                os.makedirs(os.path.dirname(target))
+            
             if self.options.copy:
                 shutil.copy2(source, target)
             else:
@@ -182,6 +198,7 @@ def main():
     ph = PhotoOrganizer(options)
     if ph.get_metadata_json():
         ph.get_paths()
+        ph.store_results()
     
     
 if __name__ == '__main__':
