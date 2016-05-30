@@ -6,12 +6,19 @@ import logging
 import subprocess
 from datetime import datetime
 
-exiftool = os.path.join('C:\skriptit', 'exiftool.exe')
-
 
 class PhotoOrganizer(object):
+    """
+    Class encapsulating script functionality to use Exiftool to get metadata
+    and copy/move it to file structure desired.
+    """
+    
     
     def __init__(self, options):
+        """
+        Constructor of the class
+        """
+        
         self.options = options
         self.metadatajson = None
         self.paths = {}
@@ -39,6 +46,8 @@ class PhotoOrganizer(object):
         
         args.append(self.options.source_dir)
         filename = 'metadata.json'
+        
+        exiftool = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'exiftool.exe')
         
         command = exiftool + ' ' + ' '.join(args) + ' >' + filename
         subprocess.call(command, shell=True)
@@ -106,7 +115,7 @@ class PhotoOrganizer(object):
                     break
                 elif os.path.isfile(targetpath):
                     self.log.info('File with same name {}'.format(targetpath))
-                    targetpath = __get_next_filename(targetpath)
+                    targetpath = self._get_next_filename(targetpath)
                 else:
                     self.log.info('Copy or Move to {}'.format(targetpath))
                     self.__copy_or_move(sourcepath, targetpath)
@@ -115,6 +124,9 @@ class PhotoOrganizer(object):
     
     def __copy_or_move(self, source, target):
         """
+        Internal function to perform copy or move based on the command line
+        arguments. Supports also dry-run option which only writes information
+        to the log file.
         """
         
         if self.options.dry_run:
@@ -132,6 +144,8 @@ class PhotoOrganizer(object):
     
     def __get_next_filename(self, filename):
         """
+        Internal function to get next filename available.
+        Uses pattern filename<_NUMBER>.extension
         """
         
         base, ext = os.path.splitext(filename)
