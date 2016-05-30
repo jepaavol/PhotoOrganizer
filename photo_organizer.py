@@ -115,7 +115,7 @@ class PhotoOrganizer(object):
                     break
                 elif os.path.isfile(targetpath):
                     self.log.info('File with same name {}'.format(targetpath))
-                    targetpath = self._get_next_filename(targetpath)
+                    targetpath = self.__get_next_filename(targetpath)
                 else:
                     self.log.info('Copy or Move to {}'.format(targetpath))
                     self.__copy_or_move(sourcepath, targetpath)
