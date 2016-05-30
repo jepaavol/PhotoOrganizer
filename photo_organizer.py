@@ -50,7 +50,8 @@ class PhotoOrganizer(object):
             self.log.info('No files to process')
             return False
         finally:
-            os.remove(filename)
+            if not self.options.keep_meta:
+                os.remove(filename)
         
         return True
      
@@ -167,6 +168,9 @@ class PhotoOrganizer(object):
                                                                  day, hour, 
                                                                  minute, second, 
                                                                  offset)
+            if int(year) < 1970:
+            #strptime cannot handle years earlier than 1970.
+                return None
             return datetime.strptime(dateformatter, 
                                      '%Y %m %d %H %M %S %z')
             
@@ -184,6 +188,7 @@ def main():
     parser.add_argument('source_dir', type=str, help='source directory')
     parser.add_argument('target_dir', type=str, help='target directory')
     parser.add_argument('-r', '--recursive', action='store_true', help='Search source directory recursively')
+    parser.add_argument('-k', '--keep-meta', action='store_true', help='Keeps metadata JSON after the run')
     parser.add_argument('-c', '--copy', action='store_true', help='copy files instead of move')
     parser.add_argument('--dry-run', action='store_true', help='Performs only analysis, not doing actual moving or copying')
     parser.add_argument('--sort', type=str, default='%Y\%m',
