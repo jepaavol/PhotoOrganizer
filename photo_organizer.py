@@ -17,7 +17,7 @@ class PhotoOrganizer(object):
         self.paths = {}
         self.log = logging.getLogger('PhotoOrganizer')
         self.log.setLevel(logging.DEBUG)
-        fileHandler = logging.FileHandler("PhotoOrganizer.log", mode='w')
+        fileHandler = logging.FileHandler("PhotoOrganizer.log", mode='w', encoding='UTF-8')
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         fileHandler.setFormatter(formatter)
         self.log.addHandler(fileHandler)
@@ -44,7 +44,7 @@ class PhotoOrganizer(object):
         subprocess.call(command, shell=True)
         
         try:
-            self.metadatajson = json.load(open(filename, 'r')) 
+            self.metadatajson = json.load(open(filename, encoding='UTF-8', mode='r')) 
         except ValueError:
             print('No files to process')
             self.log.info('No files to process')
