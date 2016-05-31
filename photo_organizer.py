@@ -75,13 +75,13 @@ class PhotoOrganizer(object):
                           'EXIF:ModifyDate', 'EXIF:DateTimeOriginal', 'EXIF:CreateDate']
         for index, image in enumerate(jsonfile):
             sourcefilename = os.path.join(self.options.source_dir, image['SourceFile'])
-            print("\Getting target paths for files {}/{}".format(index + 1, len(jsonfile)), end='')
+            print("\rGetting target paths for files {}/{}".format(index + 1, len(jsonfile)), end='')
             self.log.info('Handling file {}'.format(sourcefilename))
             
             dates = []
             for metadata in image:
                 if metadata in metadatafields:
-                    dt = self.__get_datetime(image[metadata])
+                    dt = self.get_datetime(image[metadata])
                     self.log.info('Metadata: {} Datetime: {}'.format(metadata, dt))
                     if dt:
                         dates.append((dt, metadata))
@@ -111,15 +111,17 @@ class PhotoOrganizer(object):
             targetpath = self.paths[path]['targetpath']
             
             self.log.info('Handling {}'.format(path))
-            print("\Storing file {}/{}".format(index + 1, len(self.paths)), end='')
+            print("\rStoring file {}/{}".format(index + 1, len(self.paths)), end='')
             
+            fileindex = 1
             while True: 
                 if os.path.isfile(targetpath) and filecmp.cmp(sourcepath, targetpath):
                     self.log.info('Identical file found {}'.format(targetpath))
                     break
                 elif os.path.isfile(targetpath):
                     self.log.info('File with same name {}'.format(targetpath))
-                    targetpath = self.__get_next_filename(targetpath)
+                    targetpath = self.get_next_filename(targetpath, fileindex)
+                    fileindex += 1
                 else:
                     self.log.info('Copy or Move to {}'.format(targetpath))
                     self.__copy_or_move(sourcepath, targetpath)
@@ -146,24 +148,26 @@ class PhotoOrganizer(object):
                 shutil.move(source, target)  
     
     
-    def __get_next_filename(self, filename):
+    def get_next_filename(self, filename, fileindex):
         """
         Internal function to get next filename available.
         Uses pattern filename<_NUMBER>.extension
         """
         
         base, ext = os.path.splitext(filename)
-        if len(base.rsplit('_', 1)) == 1:
-            number = 1
+        newfile = ""
+        if fileindex == 1:
+        #want to add _ after filename and therefore needs special handling for the first round
+            newfile = base + '_1' + ext
         else:
-            number = int(base.rsplit('_', 1)[1]) + 1
-        
-        return base + '_' + str(number) + ext                
+            newfile = base.rsplit('_', 1)[0] + '_{}'.format(str(fileindex)) + ext
+
+        return newfile                
                 
             
-    def __get_datetime(self, datestr):
+    def get_datetime(self, datestr):
         """
-        Internal function to get string representation of the date and returning it as 
+        Function to get string representation of the date and returning it as 
         datetime object. 
         """
         
@@ -176,11 +180,12 @@ class PhotoOrganizer(object):
             minute = mo.group(5)
             second = mo.group(6)
             offset = mo.group(7)
-            
+
             if offset:
                 offset = offset.replace(':', '')
             else:
                 offset = '+0000'
+
             
             dateformatter = '{0} {1} {2} {3} {4} {5} {6}'.format(year, month, 
                                                                  day, hour, 
