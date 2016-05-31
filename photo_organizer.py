@@ -1,5 +1,5 @@
 import json
-import os, re, sys, csv
+import os, re, sys
 import shutil
 import filecmp
 import logging
@@ -9,7 +9,7 @@ from datetime import datetime
 
 class PhotoOrganizer(object):
     """
-    Class encapsulating script functionality to use Exiftool to get metadata
+    Class that encapsulates functionality of using Exiftool to get metadata of the images
     and copy/move it to file structure desired.
     """
     
@@ -20,8 +20,9 @@ class PhotoOrganizer(object):
         """
         
         self.options = options
-        self.metadatajson = None
         self.paths = {}
+        
+        #Setting up logger.
         self.log = logging.getLogger('PhotoOrganizer')
         self.log.setLevel(logging.DEBUG)
         fileHandler = logging.FileHandler("PhotoOrganizer.log", mode='w', encoding='UTF-8')
@@ -33,10 +34,10 @@ class PhotoOrganizer(object):
         
     def get_metadata_json(self):
         """
-        Function to run Exiftool and storing received metadata to member variable.
+        Function to run Exiftool and returns JSON object describing meta values.
         """
         
-        print('Running Exiftool to get metadata of images in Json format')
+        print('Running Exiftool to get metadata of images in Json format. This might take time...')
         self.log.info('Running Exiftool to get metadata of images in Json format')
         
         args = ['-j', '-a', '-G']
@@ -45,35 +46,36 @@ class PhotoOrganizer(object):
             args += ['-r']
         
         args.append(self.options.source_dir)
-        filename = 'metadata.json'
+        filename = self.options.meta_file
         
         exiftool = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'exiftool.exe')
         
         command = exiftool + ' ' + ' '.join(args) + ' >' + filename
         subprocess.call(command, shell=True)
         
+        metadatajson = None
+        
         try:
-            self.metadatajson = json.load(open(filename, encoding='UTF-8', mode='r')) 
+            metadatajson = json.load(open(filename, encoding='UTF-8', mode='r')) 
         except ValueError:
             print('No files to process')
             self.log.info('No files to process')
-            return False
         finally:
             if not self.options.keep_meta:
                 os.remove(filename)
         
-        return True
+        return metadatajson
      
-    def get_paths(self):
+    def get_paths(self, jsonfile):
         """
         Function to analyze metadata and resolving paths to member variable.
         """
         
         metadatafields = ['File:FileModifyDate', 'File:FileAccessDate', 'File:FileCreateDate',\
                           'EXIF:ModifyDate', 'EXIF:DateTimeOriginal', 'EXIF:CreateDate']
-        for index, image in enumerate(self.metadatajson):
+        for index, image in enumerate(jsonfile):
             sourcefilename = os.path.join(self.options.source_dir, image['SourceFile'])
-            print("\rHandling file {}/{}".format(index + 1, len(self.metadatajson)), end='')
+            print("\Getting target paths for files {}/{}".format(index + 1, len(jsonfile)), end='')
             self.log.info('Handling file {}'.format(sourcefilename))
             
             dates = []
@@ -102,12 +104,14 @@ class PhotoOrganizer(object):
         """
         
         self.log.info('Storing results...')
+        print("\nStarting to store results.")
         
-        for path in self.paths:
+        for index, path in enumerate(self.paths):
             sourcepath = path
             targetpath = self.paths[path]['targetpath']
             
             self.log.info('Handling {}'.format(path))
+            print("\Storing file {}/{}".format(index + 1, len(self.paths)), end='')
             
             while True: 
                 if os.path.isfile(targetpath) and filecmp.cmp(sourcepath, targetpath):
@@ -152,7 +156,7 @@ class PhotoOrganizer(object):
         if len(base.rsplit('_', 1)) == 1:
             number = 1
         else:
-            number = int(rsplit('_', 1)[1]) + 1
+            number = int(base.rsplit('_', 1)[1]) + 1
         
         return base + '_' + str(number) + ext                
                 
@@ -209,14 +213,29 @@ def main():
                         help="choose destination folder structure using datetime format \n\
     The default is '%%Y\%%m', which separates by year then month \n\
     with both the month number and name (e.g., 2012/02).")
-    parser.add_argument('--csv', help='Creates CSV report and stores it to this filename')
+    parser.add_argument('-m', '--meta-only', action='store_true', help='Runs metadata collection part only and never deletes the file.')
+    parser.add_argument('--meta-file', type=str, help='Metadata filename', default='image_meta.json')
+    parser.add_argument('--skip-meta', action='store_true', help='Gets previously generated metadata file. Must be found from \n\
+    the location that is defined by --meta-file argument.')
 
     # parse command line arguments
     options = parser.parse_args()
 
+    if options.meta_only:
+    #Doesn't make sense to run metadata generation only and then delete the results.
+        options.keep_meta = True
+
+
     ph = PhotoOrganizer(options)
-    if ph.get_metadata_json():
-        ph.get_paths()
+    
+    metadatajsonObject = None
+    if not options.skip_meta:
+        metadatajsonObject = ph.get_metadata_json()
+    elif os.path.is_file(options.meta_file):
+        metadatajsonObject=json.load(open(filename, encoding='UTF-8', mode='r'))
+    
+    if not options.meta_only:
+        ph.get_paths(metadatajsonObject)
         ph.store_results()
     
     
