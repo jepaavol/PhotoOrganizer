@@ -149,12 +149,12 @@ class PhotoOrganizer(object):
         """
         
         base, ext = os.path.splitext(filename)
-        if len(base.split('_') == 1):
+        if len(base.split('_')) == 1:
             number = 1
         else:
             number = int(base.split('_')[1]) + 1
         
-        return base + '_' + number + ext                
+        return base + '_' + str(number) + ext                
                 
             
     def __get_datetime(self, datestr):
