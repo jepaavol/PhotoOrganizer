@@ -56,7 +56,8 @@ class PhotoOrganizer(object):
         metadatajson = None
         
         try:
-            metadatajson = json.load(open(filename, encoding='UTF-8', mode='r')) 
+            with (open(filename, encoding='UTF-8', mode='r')) as fp: 
+                metadatajson = json.load(fp) 
         except ValueError:
             print('No files to process')
             self.log.info('No files to process')
@@ -237,7 +238,8 @@ def main():
     if not options.skip_meta:
         metadatajsonObject = ph.get_metadata_json()
     elif os.path.is_file(options.meta_file):
-        metadatajsonObject=json.load(open(filename, encoding='UTF-8', mode='r'))
+        with (open(filename, encoding='UTF-8', mode='r')) as fp:
+            metadatajsonObject=json.load(fp)
     
     if not options.meta_only:
         ph.get_paths(metadatajsonObject)
