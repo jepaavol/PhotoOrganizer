@@ -45,7 +45,7 @@ class PhotoOrganizer(object):
         if self.options.recursive:
             args += ['-r']
         
-        args.append(self.options.source_dir)
+        args.append("\"{}\"".format(self.options.source_dir))
         filename = self.options.meta_file
         
         exiftool = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'exiftool.exe')
@@ -237,8 +237,8 @@ def main():
     metadatajsonObject = None
     if not options.skip_meta:
         metadatajsonObject = ph.get_metadata_json()
-    elif os.path.is_file(options.meta_file):
-        with open(filename, encoding='UTF-8', mode='r') as fp:
+    elif os.path.isfile(options.meta_file):
+        with open(options.meta_file, encoding='UTF-8', mode='r') as fp:
             metadatajsonObject=json.load(fp)
     
     if not options.meta_only:
