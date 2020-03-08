@@ -7,6 +7,9 @@ import subprocess
 from datetime import datetime
 
 
+PIC_EXTENSIONS = ['.jpg', '.png', '.gif', '.heic', '.tif']
+VIDEO_EXTENSIONS = ['.avi', '.mov', '.mp4', '.wmv', '.mpg', '.mp4']
+
 class PhotoOrganizer(object):
     """
     Class that encapsulates functionality of using Exiftool to get metadata of the images
@@ -72,8 +75,8 @@ class PhotoOrganizer(object):
         Function to analyze metadata and resolving paths to member variable.
         """
         
-        metadatafields = ['File:FileModifyDate', 'File:FileAccessDate', 'File:FileCreateDate',\
-                          'EXIF:ModifyDate', 'EXIF:DateTimeOriginal', 'EXIF:CreateDate']
+        metadatafields = ['File:FileModifyDate', 'File:FileCreateDate',\
+                          'EXIF:ModifyDate', 'EXIF:DateTimeOriginal', 'EXIF:CreateDate', 'RIFF:DateTimeOriginal']
         for index, image in enumerate(jsonfile):
             sourcefilename = os.path.join(self.options.source_dir, image['SourceFile'])
             print("\rGetting target paths for files {}/{}".format(index + 1, len(jsonfile)), end='')
@@ -91,7 +94,18 @@ class PhotoOrganizer(object):
             self.paths[sourcefilename] = {}
             if len(dates):
                 dir_structure = dates[0][0].strftime(self.options.sort)
-                self.paths[sourcefilename]['targetpath'] = os.path.join(self.options.target_dir, 
+                path, ext = os.path.splitext(sourcefilename)
+                target_dir = ""
+                if ext.lower() in PIC_EXTENSIONS:
+                    target_dir = self.options.target_dir_photos
+                elif  ext.lower() in VIDEO_EXTENSIONS:
+                    target_dir = self.options.target_dir_videos
+                else:
+                    self.log.info('Unknown extension: {}'.format(ext))
+                    self.paths[sourcefilename]['targetpath'] = 'no-info'
+                    break
+				
+                self.paths[sourcefilename]['targetpath'] = os.path.join(target_dir, 
                                                         dir_structure, 
                                                         os.path.basename(sourcefilename))
             else:
@@ -110,23 +124,24 @@ class PhotoOrganizer(object):
         for index, path in enumerate(self.paths):
             sourcepath = path
             targetpath = self.paths[path]['targetpath']
-            
-            self.log.info('Handling {}'.format(path))
-            print("\rStoring file {}/{}".format(index + 1, len(self.paths)), end='')
-            
-            fileindex = 1
-            while True: 
-                if os.path.isfile(targetpath) and filecmp.cmp(sourcepath, targetpath):
-                    self.log.info('Identical file found {}'.format(targetpath))
-                    break
-                elif os.path.isfile(targetpath):
-                    self.log.info('File with same name {}'.format(targetpath))
-                    targetpath = self.get_next_filename(targetpath, fileindex)
-                    fileindex += 1
-                else:
-                    self.log.info('Copy or Move to {}'.format(targetpath))
-                    self.__copy_or_move(sourcepath, targetpath)
-                    break
+            if targetpath != 'no-info':
+                self.log.info('Handling {}'.format(path))
+                print("\rStoring file {}/{}".format(index + 1, len(self.paths)), end='')
+                
+                fileindex = 1
+                while True: 
+                    if os.path.isfile(targetpath) and filecmp.cmp(sourcepath, targetpath):
+                        self.log.info('Identical file found {}'.format(targetpath))
+                        break
+                    elif os.path.isfile(targetpath):
+                        self.log.info('File with same name {}'.format(targetpath))
+                        targetpath = self.get_next_filename(targetpath, fileindex)
+                        fileindex += 1
+                    else:
+                        self.log.info('Copy or Move to {}'.format(targetpath))
+                        self.__copy_or_move(sourcepath, targetpath)
+                        break
+                        
   
     
     def __copy_or_move(self, source, target):
@@ -210,7 +225,8 @@ def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter,
                                      description='Organizes files into folders by date using EXIF data')
     parser.add_argument('source_dir', type=str, help='source directory')
-    parser.add_argument('target_dir', type=str, help='target directory')
+    parser.add_argument('target_dir_photos', type=str, help='target directory photos')
+    parser.add_argument('target_dir_videos', type=str, help='target directory videos')
     parser.add_argument('-r', '--recursive', action='store_true', help='Search source directory recursively')
     parser.add_argument('-k', '--keep-meta', action='store_true', help='Keeps metadata JSON after the run')
     parser.add_argument('-c', '--copy', action='store_true', help='copy files instead of move')
